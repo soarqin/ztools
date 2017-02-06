@@ -62,6 +62,8 @@ inline bool valid_str(const char* string, uint16_t* output) {
     while(*ptr != 0) {
         uint8_t c = *ptr++;
         if(c < 0x80) {
+            auto ite = cp.find(c);
+            if(ite == cp.end()) return false;
             if(optr) *optr++ = c;
         } else {
             uint32_t r = ((uint32_t)c << 8) | (*ptr++);
@@ -91,8 +93,9 @@ int main(int argc, char* argv[]) {
             const char* s = (const char*)rdata + i;
             uint32_t cnt[4] = {0, 0, 0, 0};
             if(is_utf8(s, cnt)) {
+                if (cnt[0] > 0) continue;
                 uint32_t l = (uint32_t)strlen(s);
-                if (l < 3 || cnt[2] + cnt[3] + cnt[4] == 0 || data[i + l] != 0) {
+                if (l < 3 || data[i + l] != 0) {
                     continue;
                 }
                 size_t j = i;
