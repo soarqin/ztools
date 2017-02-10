@@ -41,19 +41,47 @@ inline static uint32_t bswap(uint32_t n) {
 }
 
 #include "chs_old.inl"
-#include "jp_old.inl"
+std::set<uint32_t> jp_old;
+
 int main(int argc, char* argv[]) {
     std::set<uint32_t> nnn;
     for (auto& c: chs_old) nnn.insert(c);
 
     std::map<uint32_t, std::vector<uint8_t>> fontdata;
     std::vector<uint32_t> fonts;
-    FILE* f = fopen(argv[1], "rb");
+    FILE* f = fopen(argv[2], "rb");
     if (f == nullptr) return -1;
     fseek(f, 8, SEEK_SET);
     uint32_t count;
     fread(&count, 4, 1, f);
     fnt_header* header = new fnt_header[count];
+    fseek(f, 0x10, SEEK_SET);
+    fread(header, sizeof(fnt_header), count, f);
+    for(uint32_t i = 0; i < count; ++i) {
+        if(strcasecmp(header[i].name, "font.ffm") == 0) {
+            uint8_t* data = new uint8_t[header[i].size];
+            fseek(f, header[i].offset, SEEK_SET);
+            fread(data, 1, header[i].size, f);
+
+            uint32_t fcount = *(uint16_t*)data;
+            uint32_t* chars = (uint32_t*)(data + 0x10);
+            for(uint32_t i = 0; i < fcount; ++i) {
+                uint32_t c = bswap(chars[i]);
+                uint32_t uc = utf8_to_utf16le(c);
+                jp_old.insert(uc);
+            }
+            delete[] data;
+            break;
+        }
+    }
+    delete[] header;
+    fclose(f);
+
+    f = fopen(argv[1], "rb");
+    if (f == nullptr) return -1;
+    fseek(f, 8, SEEK_SET);
+    fread(&count, 4, 1, f);
+    header = new fnt_header[count];
     fseek(f, 0x10, SEEK_SET);
     fread(header, sizeof(fnt_header), count, f);
 
@@ -116,6 +144,11 @@ int main(int argc, char* argv[]) {
                                 }
                             }
                         }
+                        if(fonth >= 36) {
+                            uint32_t pp = fonth / 36;
+                            memmove(&v[0], &v[pitch * pp], pitch * (fonth - pp));
+                            memset(&v[pitch * (fonth - pp)], 0, pitch * pp);
+                        }
                     }
                 }
             }
@@ -125,7 +158,8 @@ int main(int argc, char* argv[]) {
     }
     delete[] header;
     fclose(f);
-    uint32_t allowed_size = 13 * texc - fonts.size();
+    uint32_t allowed_size = (count - 1) * texc - fonts.size();
+    printf("%u %u %u\n", (uint32_t)jp_old.size(), allowed_size, (uint32_t)nnn.size());
     {
         auto ite = nnn.end();
         while(nnn.size() > allowed_size) {
@@ -138,12 +172,12 @@ int main(int argc, char* argv[]) {
 
     stbtt_fontinfo font;
     size_t sz = 0;
-    uint8_t* ttf_buffer = read_file("C:/Windows/Fonts/msyh.ttc", sz);
+    uint8_t* ttf_buffer = read_file("C:/Windows/Fonts/XHei_Intel-Mono.ttc", sz);
 
-    stbtt_InitFont(&font, ttf_buffer, stbtt_GetFontOffsetForIndex(ttf_buffer,0));
+    stbtt_InitFont(&font, ttf_buffer, stbtt_GetFontOffsetForIndex(ttf_buffer, 0));
     int ascent, descent, lineGap;
     stbtt_GetFontVMetrics(&font, &ascent, &descent, &lineGap);
-    float hh = stbtt_ScaleForPixelHeight(&font, fonth + 8);
+    float hh = stbtt_ScaleForPixelHeight(&font, fonth > 20 ? fonth + 4 : fonth);
     int tt = (int)ceil(-ascent * hh);
 
     for (auto& nn: nnn) {
@@ -156,18 +190,19 @@ int main(int argc, char* argv[]) {
         auto& v = fontdata[nn];
         if(h > fonth) h = fonth;
         if(w > fontw) w = fontw;
+        if(l < 0) l = 0;
+        if (fonth >= 20) t -= 1;
+        else { l += 1; t += 1; }
+        if (t < tt) t = tt;
         v.resize(pitch * fonth);
         if (t + h - tt > fonth) {
             t = fonth + tt - h;
-        }
-        if (l + w > fontw) {
-            l = fontw - w;
         }
         for (int j=tt; j < t+h; ++j) {
             int y = j - tt;
             if (j < t) continue;
             for (int i=0; i < l+w; ++i) {
-                if (i < l) continue;
+                if (i < l || i - l >= fontw) continue;
                 if (i % 2) {
                     v[pitch * y + i / 2] |= bitmap[(j-t)*w+i-l] & 0xF0;
                 } else {
@@ -181,7 +216,7 @@ int main(int argc, char* argv[]) {
     if (fonts.empty()) return 0;
     uint32_t fsize = (uint32_t)fonts.size();
     uint32_t fcount = (fsize - 1) / texc + 1 + 1;
-    if (fcount < 14) fcount = 14;
+    if (fcount < count) fcount = count;
 
     f = fopen("FONT.DAT", "w+b");
     fwrite("DSARC FL", 1, 8, f);
@@ -208,9 +243,9 @@ int main(int argc, char* argv[]) {
     for(uint32_t i = 1; i < fcount; ++i) {
         memset(data, 0, 0x80200);
         const uint32_t color_table[16] = {0, 0x10FFFFFF, 0x20FFFFFF, 0x30FFFFFF,
-        0x40FFFFFF, 0x5AFFFFFF, 0x70FFFFFF, 0x80FFFFFF,
-        0x90FFFFFF, 0xA0FFFFFF, 0xB0FFFFFF, 0xC0FFFFFF,
-        0xD0FFFFFF, 0xE0FFFFFF, 0xF0FFFFFF, 0xFFFFFFFF};
+            0x40FFFFFF, 0x5AFFFFFF, 0x70FFFFFF, 0x80FFFFFF,
+            0x90FFFFFF, 0xA0FFFFFF, 0xB0FFFFFF, 0xC0FFFFFF,
+            0xD0FFFFFF, 0xE0FFFFFF, 0xF0FFFFFF, 0xFFFFFFFF};
         const uint8_t txp_header[16] = {0x00, 0x04, 0x00, 0x04, 0x10, 0x00, 0x0A, 0x0A, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00};
         memcpy(data, txp_header, 0x10);
         memcpy(data + 0x10, color_table, 0x40);
@@ -237,99 +272,5 @@ int main(int argc, char* argv[]) {
     fseek(f, 0x10, SEEK_SET);
     fwrite(hdr, sizeof(fnt_header), fcount, f);
     fclose(f);
-/*
-    stbtt_fontinfo font;
-    size_t sz = 0;
-    uint8_t* ttf_buffer = read_file("C:/Windows/Fonts/msyh.ttc", sz);
-
-    stbtt_InitFont(&font, ttf_buffer, stbtt_GetFontOffsetForIndex(ttf_buffer,0));
-    int ascent, descent, lineGap;
-    stbtt_GetFontVMetrics(&font, &ascent, &descent, &lineGap);
-    float hh = stbtt_ScaleForPixelHeight(&font, fonth);
-    // printf("%d %d %f\n", (int)ceil(-ascent * hh), (int)ceil(-descent * hh), hh);
-    int tt = (int)ceil(-ascent * hh);
-
-    for (uint32_t index = 0; index < (uint32_t)chars.size(); ++index) {
-        uint32_t c = chars[index];
-        if (c < 0x10000 || (c & 0xFF) < 0xE4) continue;
-        uint32_t uc = utf8_to_utf16le(c);
-        if (jp_old.find(uc) == jp_old.end()) {
-            bool found = false;
-            uint32_t u8c = 0;
-            while(!chs_old.empty()) {
-                uc = *chs_old.begin();
-                chs_old.erase(chs_old.begin());
-                u8c = utf16le_to_utf8(uc);
-                if (find_char(u8c) == 0) {
-                    found = true;
-                    break;
-                }
-            }
-            if (found) {
-                char_index.erase(c);
-                c = chars[index] = u8c;
-                char_index[u8c] = index;
-            }
-        }
-        if (index == 0) continue;
-        uint32_t texindex = index / texc;
-        uint32_t texx = (index % texc) % texw;
-        uint32_t texy = (index % texc) / texw;
-        // printf("Updating %X: %u %u %u\n", c, texindex+1, texx, texy);
-        char fn[256];
-        sprintf(fn, "font%02u.txp", texindex + 1);
-        for(uint32_t i = 0; i < count; ++i) {
-            if(strcasecmp(header[i].name, fn) == 0) {
-                uint8_t *bitmap;
-                int w, h, l, t;
-                bitmap = stbtt_GetCodepointBitmap(&font, 0, hh, uc, &w, &h, &l, &t);
-                if (bitmap == nullptr) break;
-                uint8_t* fdata = new uint8_t[pitch * fonth];
-                memset(fdata, 0, pitch * fonth);
-                // printf("%p %d %d %d %d\n", bitmap, w, h, l, t);
-                if (t + h - tt > fonth) {
-                    printf("A: %X %u\n", c, t + h - tt);
-                }
-                if (l + w > fontw) {
-                    printf("B: %X %u\n", c, l + w);
-                }
-                for (int j=tt; j < t+h; ++j) {
-                    int y = j - tt;
-                    if (j < t) continue;
-                    for (int i=0; i < l+w; ++i) {
-                        if (i < l) continue;
-                        if (i % 2) {
-                            fdata[pitch * y + i / 2] |= bitmap[(j-t)*w+i-l] & 0xF0;
-                        } else {
-                            fdata[pitch * y + i / 2] |= bitmap[(j-t)*w+i-l] >> 4;
-                        }
-                    }
-                }
-                stbtt_FreeBitmap(bitmap, 0);
-                uint8_t* ptr = fdata;
-                for (uint32_t j = 0; j < fonth; ++j) {
-                    fseek(f, header[i].offset + 0x50 + 512 * (texy * fonth + j) + texx * pitch, SEEK_SET);
-                    fwrite(ptr, 1, pitch, f);
-                    ptr += pitch;
-                }
-                header[i].offset;
-                delete[] fdata;
-                break;
-            }
-        }
-    }
-    delete[] ttf_buffer;
-
-    for(uint32_t i = 0; i < count; ++i) {
-        if(strcasecmp(header[i].name, "font.ffm") == 0) {
-            for (auto& c: chars) {
-                c = bswap(c);
-            }
-            fseek(f, header[i].offset + 0x10, SEEK_SET);
-            fwrite(&chars[0], 4, chars.size(), f);
-            break;
-        }
-    }
-*/
     return 0;
 }

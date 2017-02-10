@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
                     fseek(f, offset, SEEK_SET);
                     uint8_t* data = new uint8_t[size];
                     fread(data, 1, size, f);
-                    FILE* fout = fopen(argv[2], "wb");
+                    FILE* fout = fopen(argv[3], "wb");
                     fwrite(data, 1, size, fout);
                     fclose(fout);
                     delete[] data;
