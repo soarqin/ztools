@@ -7,7 +7,7 @@ int main(int argc, char* argv[]) {
     FILE* f = fopen(argv[1], "r+b");
     if (f == nullptr) return 0;
     FILE* f2 = fopen(argv[2], "rt");
-    if (f == nullptr) return 0;
+    if (f2 == nullptr) return 0;
     bool padding = (argc > 3) && strcmp(argv[3], "1") == 0;
     char line[4096];
     if (fgets(line, 4096, f2) == nullptr) return -1;
