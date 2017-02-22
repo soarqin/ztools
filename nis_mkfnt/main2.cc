@@ -190,7 +190,7 @@ int main(int argc, char* argv[]) {
         fonts.push_back(nn);
         uint8_t *bitmap;
         int w, h, l, t;
-        bitmap = stbtt_GetCodepointBitmap(&font, 0, hh, nn, &w, &h, &l, &t);
+        bitmap = stbtt_GetCodepointBitmap(&font, 0, hh, nn == 0x301C ? 0xFF5E : nn, &w, &h, &l, &t);
         if (bitmap == nullptr) continue;
         auto& v = fontdata[nn];
         if(h > fonth) h = fonth;
