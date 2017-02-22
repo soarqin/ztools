@@ -109,8 +109,13 @@ int main(int argc, char* argv[]) {
                     continue;
                 }
                 uint32_t uc = utf8_to_utf16le(c);
+                if (nnn.find(uc) != nnn.end()) {
+                    printf("dup: %04X\n", uc);
+                    continue;
+                }
                 fonts.push_back(uc);
                 auto& v = fontdata[uc];
+                v.clear();
                 v.resize(pitch * fonth);
 
                 uint32_t texindex = i / texc;
@@ -194,6 +199,7 @@ int main(int argc, char* argv[]) {
         if (fonth >= 20) t -= 1;
         else { l += 1; t += 1; }
         if (t < tt) t = tt;
+        v.clear();
         v.resize(pitch * fonth);
         if (t + h - tt > fonth) {
             t = fonth + tt - h;
